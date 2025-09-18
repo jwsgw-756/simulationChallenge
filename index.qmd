@@ -463,52 +463,109 @@ The account `r if(single_sim_analysis$is_profitable) {"grew"} else {"shrank"}` f
 This represents a `r round(single_sim_analysis$total_return_pct, 1)`% `r if(single_sim_analysis$is_profitable) {"gain"} else {"loss"}` over 35 years.
 
 This single simulation shows the high volatility of the game. While the expected value is positive, individual outcomes can vary dramatically. The log scale on the y-axis helps visualize the extreme range of possible outcomes.
+
+## 4. Multiple Simulations: Probability Distribution
+
+*Let's run 100 simulations to see the distribution of outcomes at age 55...*
+
+```{r}
+#| label: multiple-simulations
+
+# Run 100 simulations
+set.seed(456)  # Different seed for variety
+num_small_simulations <- 100
+
+# Run 100 simulations
+small_simulation_results <- map(1:num_small_simulations, function(i) {
+  simulate_game(initial_balance, years_to_retirement, heads_multiplier, tails_multiplier)
+})
+
+# Extract final balances
+small_final_balances <- map_dbl(small_simulation_results, ~ .x$final_balance)
+
+# Create results dataframe
+small_results_df <- tibble(
+  simulation = 1:num_small_simulations,
+  final_balance = small_final_balances,
+  return_pct = (small_final_balances / initial_balance - 1) * 100
+)
+
+# Calculate summary statistics for 100 simulations
+small_summary_stats <- small_results_df %>%
+  summarise(
+    mean_balance = mean(final_balance),
+    median_balance = median(final_balance),
+    min_balance = min(final_balance),
+    max_balance = max(final_balance),
+    std_dev = sd(final_balance),
+    prob_positive = mean(return_pct > 0),
+    prob_break_even = mean(final_balance >= initial_balance)
+  )
+
+# Create probability distribution plot
+p_distribution <- ggplot(small_results_df, aes(x = final_balance)) +
+  geom_histogram(bins = 20, fill = "steelblue", alpha = 0.7, color = "black", 
+                 aes(y = after_stat(density))) +
+  geom_density(color = "red", size = 1.2, alpha = 0.8) +
+  geom_vline(xintercept = initial_balance, color = "red", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = small_summary_stats$mean_balance, color = "green", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = small_summary_stats$median_balance, color = "orange", linetype = "dashed", size = 1) +
+  scale_x_continuous(labels = dollar_format(), trans = "log10") +
+  labs(
+    title = "Probability Distribution of Final Balances (100 Simulations)",
+    subtitle = paste("Mean: $", format(round(small_summary_stats$mean_balance, 2), big.mark = ","),
+                     " | Median: $", format(round(small_summary_stats$median_balance, 2), big.mark = ","),
+                     " | Std Dev: $", format(round(small_summary_stats$std_dev, 2), big.mark = ",")),
+    x = "Final Balance at Age 55 ($, Log Scale)",
+    y = "Probability Density",
+    caption = "Red line = Initial $1,000 | Green line = Mean | Orange line = Median"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 12, color = "darkblue"),
+    plot.caption = element_text(size = 10, color = "gray"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10)
+  )
+
+print(p_distribution)
+
+# Store results for display
+invisible({
+  small_sim_analysis <- list(
+    num_simulations = num_small_simulations,
+    mean_balance = small_summary_stats$mean_balance,
+    median_balance = small_summary_stats$median_balance,
+    min_balance = small_summary_stats$min_balance,
+    max_balance = small_summary_stats$max_balance,
+    std_dev = small_summary_stats$std_dev,
+    prob_positive = small_summary_stats$prob_positive,
+    prob_break_even = small_summary_stats$prob_break_even
+  )
+})
 ```
 
----
+**100 Simulations Analysis:**
 
-# 🎯 Key Insights & Conclusions
+- **Number of simulations:** `r small_sim_analysis$num_simulations`
+- **Mean final balance:** $`r format(round(small_sim_analysis$mean_balance, 2), big.mark = ",")`
+- **Median final balance:** $`r format(round(small_sim_analysis$median_balance, 2), big.mark = ",")`
+- **Minimum final balance:** $`r format(round(small_sim_analysis$min_balance, 2), big.mark = ",")`
+- **Maximum final balance:** $`r format(round(small_sim_analysis$max_balance, 2), big.mark = ",")`
+- **Standard deviation:** $`r format(round(small_sim_analysis$std_dev, 2), big.mark = ",")`
+- **Probability of positive return:** `r round(small_sim_analysis$prob_positive * 100, 1)`%
+- **Probability of breaking even or better:** `r round(small_sim_analysis$prob_break_even * 100, 1)`%
 
-## The Counter-Intuitive Truth
+**Key Observations:**
 
-This simulation reveals a fascinating paradox in investment strategy:
+The probability distribution reveals the **extreme volatility** of this investment strategy:
 
-### ✅ **Mathematically Favorable**
-- **Expected return:** +5% per year
-- **35-year expectation:** ~$5,516 (451% gain)
-- **The math says:** This is a profitable strategy
+- **Wide range:** From $`r format(round(small_sim_analysis$min_balance, 2), big.mark = ",")` to $`r format(round(small_sim_analysis$max_balance, 2), big.mark = ",")`
+- **High standard deviation:** $`r format(round(small_sim_analysis$std_dev, 2), big.mark = ",")` indicates massive variability
+- **Skewed distribution:** The mean ($`r format(round(small_sim_analysis$mean_balance, 2), big.mark = ",")`) is much higher than the median ($`r format(round(small_sim_analysis$median_balance, 2), big.mark = ",")`)
+- **Most outcomes are losses:** Only `r round(small_sim_analysis$prob_positive * 100, 1)`% of simulations resulted in positive returns
 
-### ❌ **Reality for Most People**
-- **Median outcome:** Likely a loss
-- **Most participants:** Will lose money
-- **Volatility:** Extreme swings make it unsuitable for most investors
-
-## The Investment Lesson
-
-This coin-flip game demonstrates a fundamental principle of finance: **high expected returns don't guarantee good outcomes for most participants**. The combination of volatility and compounding creates a scenario where:
-
-- The mathematical expectation is profitable
-- Most people will lose money  
-- A few people will become extremely wealthy
-- The median outcome is likely negative
-
-## Real-World Parallels
-
-This simulation mirrors many real investment strategies:
-- **Cryptocurrency investing:** High volatility with potential for massive gains or losses
-- **Penny stocks:** Similar asymmetric risk-return profiles  
-- **Leveraged ETFs:** Designed to amplify daily returns but can suffer from volatility drag
-- **Startup investing:** Most startups fail, but a few create enormous returns
-
-## Final Recommendation
-
-While the expected value is positive, this strategy is essentially a **high-stakes lottery** where:
-- A few winners take home life-changing amounts
-- Most participants lose their initial investment
-- The risk-reward profile is unsuitable for most investors
-
-**Bottom line:** Understanding the difference between expected value and typical outcomes is crucial in real-world investing. Diversification and risk management matter more than mathematical expectations alone.
+This distribution clearly shows why this strategy, despite having a positive expected value, is extremely risky for individual investors.
 
 ---
-
-*This analysis demonstrates the power of Monte Carlo simulation in revealing counter-intuitive insights about investment strategies that appear profitable on paper but may be devastating in practice.*
