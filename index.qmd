@@ -14,3 +14,215 @@ execute:
 
 **Your Mission:** Create a comprehensive Quarto document that simulates one or two investment strategies, analyzes the results, and demonstrates your ability to present counter-intuitive findings compellingly. Then render the document to HTML and deploy it via GitHub Pages from a new repository called "simulationChallenge."
 
+# Complete Simulation
+
+```{r}
+#| label: complete-simulation
+
+# Load required libraries
+library(dplyr)
+library(ggplot2)
+library(purrr)
+library(tibble)
+library(scales)
+
+# Set global options
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 10,
+  fig.height = 6
+)
+
+# Game parameters
+initial_balance <- 1000
+heads_multiplier <- 1.5  # +50%
+tails_multiplier <- 0.6  # -40%
+years_to_retirement <- 35  # Assuming starting at age 20
+num_simulations <- 10000
+
+# Function to simulate a single game
+simulate_game <- function(initial_balance, years, heads_mult, tails_mult) {
+  balance <- initial_balance
+  
+  # Track the balance over time for this simulation
+  balance_history <- numeric(years + 1)
+  balance_history[1] <- balance
+  
+  for (year in 1:years) {
+    # Flip coin (0 = tails, 1 = heads)
+    coin_flip <- rbinom(1, 1, 0.5)
+    
+    if (coin_flip == 1) {
+      # Heads: increase by 50%
+      balance <- balance * heads_mult
+    } else {
+      # Tails: decrease by 40%
+      balance <- balance * tails_mult
+    }
+    
+    balance_history[year + 1] <- balance
+  }
+  
+  return(list(
+    final_balance = balance,
+    balance_history = balance_history
+  ))
+}
+
+# Run many simulations
+set.seed(123)  # For reproducibility
+
+# Run simulations
+simulation_results <- map(1:num_simulations, function(i) {
+  simulate_game(initial_balance, years_to_retirement, heads_multiplier, tails_multiplier)
+})
+
+# Extract final balances
+final_balances <- map_dbl(simulation_results, ~ .x$final_balance)
+
+# Create results dataframe
+results_df <- tibble(
+  simulation = 1:num_simulations,
+  final_balance = final_balances,
+  return_pct = (final_balances / initial_balance - 1) * 100
+)
+
+# Summary statistics
+summary_stats <- results_df %>%
+  summarise(
+    mean_balance = mean(final_balance),
+    median_balance = median(final_balance),
+    min_balance = min(final_balance),
+    max_balance = max(final_balance),
+    mean_return = mean(return_pct),
+    median_return = median(return_pct),
+    prob_positive = mean(return_pct > 0),
+    prob_break_even = mean(final_balance >= initial_balance)
+  )
+
+# Mathematical analysis
+expected_annual_return <- 0.5 * 1.5 + 0.5 * 0.6  # 0.5 * 1.5 + 0.5 * 0.6 = 1.05
+expected_total_return <- expected_annual_return^years_to_retirement
+expected_final_balance <- initial_balance * expected_total_return
+
+# Volatility analysis
+volatility_stats <- results_df %>%
+  summarise(
+    std_dev = sd(return_pct),
+    q25 = quantile(return_pct, 0.25),
+    q75 = quantile(return_pct, 0.75),
+    q90 = quantile(return_pct, 0.90),
+    q95 = quantile(return_pct, 0.95),
+    q99 = quantile(return_pct, 0.99)
+  )
+
+# Print results
+cat("=== GAME PARAMETERS ===")
+cat("\nInitial Balance: $", format(initial_balance, big.mark = ","))
+cat("\nHeads: +50% (multiplier =", heads_multiplier, ")")
+cat("\nTails: -40% (multiplier =", tails_multiplier, ")")
+cat("\nYears to retirement:", years_to_retirement)
+cat("\nNumber of simulations:", format(num_simulations, big.mark = ","))
+
+cat("\n\n=== SIMULATION RESULTS ===")
+cat("\nMean final balance: $", format(round(summary_stats$mean_balance, 2), big.mark = ","))
+cat("\nMedian final balance: $", format(round(summary_stats$median_balance, 2), big.mark = ","))
+cat("\nMin final balance: $", format(round(summary_stats$min_balance, 2), big.mark = ","))
+cat("\nMax final balance: $", format(round(summary_stats$max_balance, 2), big.mark = ","))
+cat("\nMean return: ", round(summary_stats$mean_return, 1), "%")
+cat("\nMedian return: ", round(summary_stats$median_return, 1), "%")
+cat("\nProbability of positive return: ", round(summary_stats$prob_positive * 100, 1), "%")
+cat("\nProbability of breaking even or better: ", round(summary_stats$prob_break_even * 100, 1), "%")
+
+cat("\n\n=== MATHEMATICAL ANALYSIS ===")
+cat("\nExpected annual multiplier:", round(expected_annual_return, 4))
+cat("\nExpected total multiplier over", years_to_retirement, "years:", round(expected_total_return, 2))
+cat("\nExpected final balance: $", format(round(expected_final_balance, 2), big.mark = ","))
+cat("\nExpected return: ", round((expected_final_balance / initial_balance - 1) * 100, 1), "%")
+
+cat("\n\n=== VOLATILITY ANALYSIS ===")
+cat("\nStandard deviation of returns:", round(volatility_stats$std_dev, 1), "%")
+cat("\n25th percentile:", round(volatility_stats$q25, 1), "%")
+cat("\n75th percentile:", round(volatility_stats$q75, 1), "%")
+cat("\n90th percentile:", round(volatility_stats$q90, 1), "%")
+cat("\n95th percentile:", round(volatility_stats$q95, 1), "%")
+cat("\n99th percentile:", round(volatility_stats$q99, 1), "%")
+```
+
+# Visualizations
+
+```{r}
+#| label: visualizations
+
+# Distribution of Final Balances
+p1 <- ggplot(results_df, aes(x = final_balance)) +
+  geom_histogram(bins = 50, fill = "steelblue", alpha = 0.7, color = "black") +
+  geom_vline(xintercept = initial_balance, color = "red", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = summary_stats$mean_balance, color = "green", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = summary_stats$median_balance, color = "orange", linetype = "dashed", size = 1) +
+  scale_x_continuous(labels = dollar_format(), trans = "log10") +
+  labs(
+    title = "Distribution of Final Balances (Log Scale)",
+    subtitle = "Red line = Initial $1,000 | Green line = Mean | Orange line = Median",
+    x = "Final Balance ($)",
+    y = "Frequency"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold"),
+    plot.subtitle = element_text(size = 12)
+  )
+
+# Distribution of Returns
+p2 <- ggplot(results_df, aes(x = return_pct)) +
+  geom_histogram(bins = 50, fill = "darkgreen", alpha = 0.7, color = "black") +
+  geom_vline(xintercept = 0, color = "red", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = summary_stats$mean_return, color = "blue", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = summary_stats$median_return, color = "orange", linetype = "dashed", size = 1) +
+  labs(
+    title = "Distribution of Percentage Returns",
+    subtitle = "Red line = Break-even (0%) | Blue line = Mean | Orange line = Median",
+    x = "Return (%)",
+    y = "Frequency"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold"),
+    plot.subtitle = element_text(size = 12)
+  )
+
+# Sample Paths Over Time
+sample_indices <- sample(1:num_simulations, 100)
+sample_histories <- map(sample_indices, ~ simulation_results[[.x]]$balance_history)
+
+years <- 0:years_to_retirement
+path_data <- map_dfr(1:length(sample_histories), function(i) {
+  tibble(
+    simulation = i,
+    year = years,
+    balance = sample_histories[[i]]
+  )
+})
+
+p3 <- ggplot(path_data, aes(x = year, y = balance, group = simulation)) +
+  geom_line(alpha = 0.3, color = "steelblue") +
+  scale_y_continuous(labels = dollar_format(), trans = "log10") +
+  labs(
+    title = "Sample of 100 Simulation Paths",
+    subtitle = "Each line represents one possible outcome over 35 years",
+    x = "Year",
+    y = "Account Balance ($, Log Scale)"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold"),
+    plot.subtitle = element_text(size = 12)
+  )
+
+# Display plots
+print(p1)
+print(p2)
+print(p3)
+```
